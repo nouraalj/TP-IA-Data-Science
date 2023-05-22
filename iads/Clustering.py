@@ -13,9 +13,11 @@ Année: LU3IN026 - semestre 2 - 2022-2023, Sorbonne Université
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 
 import scipy.cluster.hierarchy
 import math
+import random
 from scipy.spatial.distance import cdist
 # ------------------------ 
 
@@ -75,7 +77,7 @@ def CHA_centroid(df, verbose=False, dendrogramme=False):
         distances.append([i, j, dist, len(partition[max(partition.keys())])])
     if dendrogramme:
         plt.figure(figsize=(30, 15)) # taille : largeur x hauteur
-        plt.title('Dendrogramme', fontsize=25)    
+        plt.title('Dendrogramme (Approche Centroid linkage)', fontsize=25)    
         plt.xlabel("Indice d'exemple", fontsize=25)
         plt.ylabel('Distance', fontsize=25)
 
@@ -90,6 +92,89 @@ def CHA_centroid(df, verbose=False, dendrogramme=False):
         
     return distances
 
+def CHA_complete(df, verbose=False, dendrogramme=False):
+    """
+    Clustering hiérarchique ascendant (CHA) avec le linkage complete.
+    """
+    P0 = [[i] for i in range(len(df))]
+    history = []
+    while len(P0) > 1:
+        P1, ci, cj, dist = fusionne(df, P0, linkage='complete', verbose=verbose)
+        history.append([ci, cj, dist, len(P1[ci])+len(P1[cj])])
+        P0 = P1
+    if verbose:
+        print("Nombre de clusters obtenus : ", len(P0))
+    if dendrogramme:
+        plt.figure(figsize=(30, 15)) # taille : largeur x hauteur
+        plt.title('Dendrogramme (Approche Complete linkage)', fontsize=25)    
+        plt.xlabel("Indice d'exemple", fontsize=25)
+        plt.ylabel('Distance', fontsize=25)
+
+        # Construction du dendrogramme pour notre clustering :
+        scipy.cluster.hierarchy.dendrogram(
+            CHA_simple(df), 
+            leaf_font_size=24.,  # taille des caractères de l'axe des X
+        )
+
+        # Affichage du résultat obtenu:
+        plt.show()
+    return P1
+
+def CHA_simple(df, verbose=False, dendrogramme=False):
+    # Initialisation de la partition
+    P0 = initialise_CHA(df)
+    history = []
+    # Boucle principale du clustering
+    while len(P0) > 1:
+        P1, ci, cj, dist = fusionne(df, P0, linkage="single")
+        history.append([ci, cj, dist, len(P1[ci])+len(P1[cj])])
+        P0 = P1
+    # Affichage du nombre de clusters obtenus
+    if verbose:
+        print("Nombre de clusters obtenus : ", len(P0))
+    if dendrogramme:
+        plt.figure(figsize=(30, 15)) # taille : largeur x hauteur
+        plt.title('Dendrogramme (Approche Simple linkage)', fontsize=25)    
+        plt.xlabel("Indice d'exemple", fontsize=25)
+        plt.ylabel('Distance', fontsize=25)
+
+        # Construction du dendrogramme pour notre clustering :
+        scipy.cluster.hierarchy.dendrogram(
+            CHA_simple(df), 
+            leaf_font_size=24.,  # taille des caractères de l'axe des X
+        )
+
+        # Affichage du résultat obtenu:
+        plt.show()
+    return history
+
+def CHA_average(df, verbose=False, dendrogramme=False):
+    # Initialisation de la partition
+    P0 = initialise_CHA(df)
+    history = []
+    # Boucle principale du clustering
+    while len(P0) > 1:
+        P1, ci, cj, dist = fusionne(df, P0, linkage="average")
+        history.append([ci, cj, dist, len(P1[ci])+len(P1[cj])])
+        P0 = P1
+    # Affichage du nombre de clusters obtenus
+    if verbose:
+        print("Nombre de clusters obtenus : ", len(P0))
+    if dendrogramme:
+        plt.figure(figsize=(30, 15)) # taille : largeur x hauteur
+        plt.title('Dendrogramme (Approche Average linkage)', fontsize=25)    
+        plt.xlabel("Indice d'exemple", fontsize=25)
+        plt.ylabel('Distance', fontsize=25)
+
+        # Construction du dendrogramme pour notre clustering :
+        scipy.cluster.hierarchy.dendrogram(
+            CHA_average(df), 
+            leaf_font_size=24.,  # taille des caractères de l'axe des X
+        )
+
+        # Affichage du résultat obtenu:
+        plt.show()
+    return history
 
 def dist_linkage_clusters(linkage, dist_func, arr1, arr2):
     r = cdist(arr1, arr2, dist_func)
@@ -152,7 +237,7 @@ def clustering_hierarchique_average(df, dist_func='euclidean',
     return clustering_hierarchique_linkage('average', df, dist_func,
                                           verbose, dendrogramme)
                                           
-def CHA(DF,linkage='centroid', dist="euclidiean", verbose=False,dendrogramme=False):
+def CHA(DF,linkage='centroid', dist="euclidean", verbose=False,dendrogramme=False):
     """
     
     """
@@ -164,4 +249,60 @@ def CHA(DF,linkage='centroid', dist="euclidiean", verbose=False,dendrogramme=Fal
         return clustering_hierarchique_average(DF,dist, verbose, dendrogramme)
     elif linkage == "centroid" :
         return CHA_centroid(DF,verbose, dendrogramme)
+    
+
+
+def inertie_cluster(Ens):
+    centre = Ens.mean()
+    inertie = np.sum(np.linalg.norm(Ens - centre, axis=1) ** 2)
+    return inertie
+    
+    
+def init_kmeans(K,Ens):
+    return np.asarray(random.sample(list(np.array(Ens)), K))
+    
+    
+def plus_proche(Exe,Centres):
+    l = [dist_euclidienne(Exe,c) for c in Centres]
+    return np.argmin(l)
+    
+
+def affecte_cluster(Base,Centres):
+    Y = np.argmin(cdist(Base, Centres), axis=1)
+    return {c:list(np.where(Y==c)[0]) for c in range(len(Centres))}
+
+
+def nouveaux_centroides(Base,U):
+    return np.array([np.mean(np.array(Base)[i], axis=0) for i in U.values()])
+
+def inertie_globale(Base, U):
+    somme = 0
+    for key in U:
+        newBase = Base.iloc[U[key]]
+        somme += inertie_cluster(newBase)
+    return somme
+
+def kmoyennes(K, base, epsilon, iter_max, verbose=True):
+    #initialisation :
+    ig = 0 #inertie globale
+    Centres = init_kmeans(K, base) #ensemble des centroides
+    U = {} #matrice d'affectation vide au début
+    for i in range(iter_max):
+        U = affecte_cluster(base, Centres) 
+        ig_cur = inertie_globale(base, U) 
+        print(f'Iteration {i} Inertie : {ig_cur:.4f} Difference: {np.abs(ig_cur-ig):.4f}')
+        if np.abs(ig_cur-ig) < epsilon: break
+        ig = ig_cur
+        Centres = nouveaux_centroides(base, U)
+    return Centres, U
+
+def affiche_resultat(Base,Centres,Affect):
+    couleurs = cm.tab20(np.linspace(0, 1, 20))
+    c = 0
+    for v in Affect.values():
+        for i in v:
+            plt.scatter(Base.iloc[i,0],Base.iloc[i,1],color=couleurs[c])
+        c += 1
+    plt.scatter(Centres[:,0], Centres[:,1], color='r', marker='x')
+    plt.show()
     
